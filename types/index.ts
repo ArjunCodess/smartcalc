@@ -25,3 +25,15 @@ export interface Response {
   result: string;
   assign: boolean;
 }
+
+export interface Answer {
+  expr: string
+  result: string | number
+  assign?: boolean
+}
+
+export interface LatexExpression {
+  content: string;
+  position: { x: number; y: number };
+  ref: React.RefObject<HTMLDivElement>;
+}

@@ -1,12 +1,12 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback, createRef } from "react";
 import axios from "axios";
-import Draggable from "react-draggable";
+import Draggable, {DraggableEvent} from "react-draggable";
 import { SWATCHES } from "@/app/constants";
 import { motion } from "framer-motion";
-import type { GeneratedResult, Response } from "@/types";
+import type { GeneratedResult, LatexExpression, Response } from "@/types";
 
 export default function Home() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -15,24 +15,23 @@ export default function Home() {
   const [reset, setReset] = useState(false);
   const [dictOfVars, setDictOfVars] = useState<Record<string, string>>({});
   const [result, setResult] = useState<GeneratedResult>();
-  const [latexPosition, setLatexPosition] = useState({ x: 10, y: 200 });
-  const [latexExpressions, setLatexExpressions] = useState<Array<string>>([]);
+  const [latexItems, setLatexItems] = useState<LatexExpression[]>([]);
   const [isEraser, setIsEraser] = useState(false);
   const [eraserRadius, setEraserRadius] = useState(10);
   const [cursorPosition, setCursorPosition] = useState({ x: 0, y: 0 });
 
   useEffect(() => {
-    if (latexExpressions.length > 0 && window.MathJax) {
+    if (latexItems.length > 0 && window.MathJax) {
       setTimeout(() => {
         window.MathJax.Hub.Queue(["Typeset", window.MathJax.Hub] as never);
       }, 0);
     }
-  }, [latexExpressions]);
+  }, [latexItems]);
 
   useEffect(() => {
     if (reset) {
       resetCanvas();
-      setLatexExpressions([]);
+      setLatexItems([]);
       setResult(undefined);
       setDictOfVars({});
       setReset(false);
@@ -75,15 +74,11 @@ export default function Home() {
 
   const renderLatexToCanvas = useCallback((expression: string, answer: string) => {
     const latex = `\\(\\LARGE{${expression} = ${answer}}\\)`;
-    setLatexExpressions(prev => [...prev, latex]);
-
-    const canvas = canvasRef.current;
-    if (canvas) {
-      const ctx = canvas.getContext("2d");
-      if (ctx) {
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-      }
-    }
+    setLatexItems(prev => [...prev, {
+      content: latex,
+      position: { x: 10, y: 200 },
+      ref: createRef<HTMLDivElement>()
+    }]);
   }, []);
 
   useEffect(() => {
@@ -146,57 +141,90 @@ export default function Home() {
     const canvas = canvasRef.current;
 
     if (canvas) {
-      const response = await axios({
-        method: "post",
-        url: `${process.env.NEXT_PUBLIC_API_URL}/calculate`,
-        data: {
-          image: canvas.toDataURL("image/png"),
-          dict_of_vars: dictOfVars,
-        },
-      });
+      try {
+        const response = await axios({
+          method: "post",
+          url: "/api/calculate",
+          data: {
+            image: canvas.toDataURL("image/png"),
+            dict_of_vars: dictOfVars,
+          },
+        });
 
-      const resp = await response.data;
-      console.log("Response", resp);
-      resp.data.forEach((data: Response) => {
-        if (data.assign === true) {
-          setDictOfVars({
-            ...dictOfVars,
-            [data.expr]: data.result,
+        const resp = response.data;
+        console.log("Response", resp);
+        
+        if (!resp.data || resp.data.length === 0) {
+          console.log("No results found");
+          setResult({
+            expression: "Error",
+            answer: "No results found"
           });
+          return;
         }
-      });
 
-      const ctx = canvas.getContext("2d");
-      const imageData = ctx!.getImageData(0, 0, canvas.width, canvas.height);
-      let minX = canvas.width,
-        minY = canvas.height,
-        maxX = 0,
-        maxY = 0;
+        // Process assignments first
+        resp.data.forEach((data: Response) => {
+          if (data.assign === true) {
+            setDictOfVars(prev => ({
+              ...prev,
+              [data.expr]: data.result,
+            }));
+          }
+        });
 
-      for (let y = 0; y < canvas.height; y++) {
-        for (let x = 0; x < canvas.width; x++) {
-          const i = (y * canvas.width + x) * 4;
-          if (imageData.data[i + 3] > 0) {
-            minX = Math.min(minX, x);
-            minY = Math.min(minY, y);
-            maxX = Math.max(maxX, x);
-            maxY = Math.max(maxY, y);
+        // Then process expressions and render each one
+        resp.data.forEach((data: Response) => {
+          if (!data.assign) {
+            setResult({
+              expression: data.expr,
+              answer: data.result,
+            });
+            renderLatexToCanvas(data.expr, data.result);
+          } else {
+            // Also render variable assignments
+            renderLatexToCanvas(data.expr, data.result);
+          }
+        });
+
+        // Calculate position for LaTeX display
+        const ctx = canvas.getContext("2d");
+        const imageData = ctx!.getImageData(0, 0, canvas.width, canvas.height);
+        let minX = canvas.width,
+            minY = canvas.height,
+            maxX = 0,
+            maxY = 0;
+
+        for (let y = 0; y < canvas.height; y++) {
+          for (let x = 0; x < canvas.width; x++) {
+            const i = (y * canvas.width + x) * 4;
+            if (imageData.data[i + 3] > 0) {
+              minX = Math.min(minX, x);
+              minY = Math.min(minY, y);
+              maxX = Math.max(maxX, x);
+              maxY = Math.max(maxY, y);
+            }
           }
         }
+
+        // Update positions of all latex items to stack them vertically below the equation
+        setLatexItems(prev => 
+          prev.map((item, i) => ({
+            ...item,
+            position: { 
+              x: (minX + maxX) / 2 - 50, // Center horizontally, offset by 50px for better visual alignment
+              y: maxY + 50 + (i * 40)    // Position below the equation with 50px gap, stack with 40px spacing
+            }
+          }))
+        );
+
+      } catch (error) {
+        console.error("Error calling API:", error);
+        setResult({
+          expression: "Error",
+          answer: "Failed to process expression"
+        });
       }
-
-      const centerX = (minX + maxX) / 2;
-      const centerY = (minY + maxY) / 2;
-
-      setLatexPosition({ x: centerX, y: centerY });
-      resp.data.forEach((data: Response) => {
-        setTimeout(() => {
-          setResult({
-            expression: data.expr,
-            answer: data.result,
-          });
-        }, 1000);
-      });
     }
   };
 
@@ -220,6 +248,14 @@ export default function Home() {
       x: e.nativeEvent.offsetX,
       y: e.nativeEvent.offsetY
     });
+  };
+
+  const handleDrag = (index: number, e: DraggableEvent, data: { x: number; y: number }) => {
+    setLatexItems(prev => 
+      prev.map((item, i) => 
+        i === index ? { ...item, position: { x: data.x, y: data.y } } : item
+      )
+    );
   };
 
   return (
@@ -249,21 +285,27 @@ export default function Home() {
         />
       )}
 
-      {latexExpressions.map((latex, index) => (
+      {latexItems.map((item, index) => (
         <Draggable
           key={index}
-          defaultPosition={latexPosition}
-          onStop={(e, data) => setLatexPosition({ x: data.x, y: data.y })}
+          position={item.position}
+          onDrag={(e, data) => handleDrag(index, e, data)}
+          bounds="parent"
+          nodeRef={item.ref}
         >
-          <div className="absolute p-2 text-white rounded shadow-md">
-            <div className="latex-content">{latex}</div>
+          <div 
+            ref={item.ref}
+            className="absolute p-2 text-white rounded shadow-md cursor-move"
+            style={{ touchAction: 'none' }}
+          >
+            <div className="latex-content">{item.content}</div>
           </div>
         </Draggable>
       ))}
 
       <div className="absolute bottom-0 left-0 right-0 p-4 bg-neutral-900 bg-opacity-80 backdrop-blur-sm border-t border-neutral-700">
-        <div className="max-w-7xl mx-auto flex justify-between items-center gap-4">
-          <div className="flex gap-3">
+        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row justify-between items-center gap-4">
+          <div className="flex flex-wrap justify-center sm:justify-start gap-3 w-full sm:w-auto">
             <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
               <Button
                 onClick={() => setReset(true)}
@@ -301,7 +343,7 @@ export default function Home() {
             )}
           </div>
           
-          <div className="flex gap-3 justify-center flex-wrap">
+          <div className="flex gap-3 justify-center flex-wrap my-2 sm:my-0">
             {!isEraser && SWATCHES.map((swatch: string) => (
               <motion.button
                 key={swatch}
@@ -314,7 +356,7 @@ export default function Home() {
             ))}
           </div>
           
-          <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+          <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} className="w-full sm:w-auto flex justify-center">
             <Button
               onClick={runRoute}
               className="bg-green-600 hover:bg-green-700 text-neutral-100 font-semibold py-2 px-4 rounded-full shadow-lg transition-all duration-300"
