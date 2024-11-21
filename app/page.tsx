@@ -17,6 +17,9 @@ export default function Home() {
   const [result, setResult] = useState<GeneratedResult>();
   const [latexPosition, setLatexPosition] = useState({ x: 10, y: 200 });
   const [latexExpressions, setLatexExpressions] = useState<Array<string>>([]);
+  const [isEraser, setIsEraser] = useState(false);
+  const [eraserRadius, setEraserRadius] = useState(10);
+  const [cursorPosition, setCursorPosition] = useState({ x: 0, y: 0 });
 
   useEffect(() => {
     if (latexExpressions.length > 0 && window.MathJax) {
@@ -106,22 +109,31 @@ export default function Home() {
       if (ctx) {
         ctx.beginPath();
         ctx.moveTo(e.nativeEvent.offsetX, e.nativeEvent.offsetY);
+        if (isEraser) {
+          ctx.globalCompositeOperation = 'destination-out';
+        } else {
+          ctx.globalCompositeOperation = 'source-over';
+        }
         setIsDrawing(true);
       }
     }
   };
 
   const draw = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (!isDrawing) {
-      return;
-    }
+    if (!isDrawing) return;
+    
     const canvas = canvasRef.current;
     if (canvas) {
       const ctx = canvas.getContext("2d");
       if (ctx) {
-        ctx.strokeStyle = color;
-        ctx.lineTo(e.nativeEvent.offsetX, e.nativeEvent.offsetY);
-        ctx.stroke();
+        if (isEraser) {
+          erase(e);
+        } else {
+          ctx.globalCompositeOperation = 'source-over';
+          ctx.strokeStyle = color;
+          ctx.lineTo(e.nativeEvent.offsetX, e.nativeEvent.offsetY);
+          ctx.stroke();
+        }
       }
     }
   };
@@ -188,6 +200,28 @@ export default function Home() {
     }
   };
 
+  const erase = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    if (!isDrawing) return;
+    
+    const canvas = canvasRef.current;
+    if (canvas) {
+      const ctx = canvas.getContext("2d");
+      if (ctx) {
+        ctx.globalCompositeOperation = 'destination-out';
+        ctx.beginPath();
+        ctx.arc(e.nativeEvent.offsetX, e.nativeEvent.offsetY, eraserRadius, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+  };
+
+  const updateCursorPosition = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    setCursorPosition({
+      x: e.nativeEvent.offsetX,
+      y: e.nativeEvent.offsetY
+    });
+  };
+
   return (
     <main className="fixed inset-0 w-screen h-screen bg-black overflow-hidden">
       <canvas
@@ -195,10 +229,25 @@ export default function Home() {
         id='canvas'
         className='absolute inset-0 w-full h-full'
         onMouseDown={startDrawing}
-        onMouseMove={draw}
+        onMouseMove={(e) => {
+          updateCursorPosition(e);
+          draw(e);
+        }}
         onMouseUp={stopDrawing}
         onMouseOut={stopDrawing}
       />
+
+      {isEraser && (
+        <div
+          className="pointer-events-none absolute border-2 border-white rounded-full opacity-50"
+          style={{
+            width: `${eraserRadius * 2}px`,
+            height: `${eraserRadius * 2}px`,
+            transform: `translate(${cursorPosition.x - eraserRadius}px, ${cursorPosition.y - eraserRadius}px)`,
+            transition: 'width 0.2s, height 0.2s'
+          }}
+        />
+      )}
 
       {latexExpressions.map((latex, index) => (
         <Draggable
@@ -214,17 +263,46 @@ export default function Home() {
 
       <div className="absolute bottom-0 left-0 right-0 p-4 bg-neutral-900 bg-opacity-80 backdrop-blur-sm border-t border-neutral-700">
         <div className="max-w-7xl mx-auto flex justify-between items-center gap-4">
-          <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-            <Button
-              onClick={() => setReset(true)}
-              className="bg-red-600 hover:bg-red-700 text-neutral-100 font-semibold py-2 px-4 rounded-full shadow-lg transition-all duration-300"
-            >
-              Reset
-            </Button>
-          </motion.div>
+          <div className="flex gap-3">
+            <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+              <Button
+                onClick={() => setReset(true)}
+                className="bg-red-600 hover:bg-red-700 text-neutral-100 font-semibold py-2 px-4 rounded-full shadow-lg transition-all duration-300"
+              >
+                Reset
+              </Button>
+            </motion.div>
+
+            <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+              <Button
+                onClick={() => setIsEraser(!isEraser)}
+                className={`${
+                  isEraser 
+                    ? 'bg-blue-600 hover:bg-blue-700' 
+                    : 'bg-neutral-700 hover:bg-neutral-600'
+                } text-neutral-100 font-semibold py-2 px-4 rounded-full shadow-lg transition-all duration-300`}
+              >
+                {isEraser ? 'Drawing Mode' : 'Eraser Mode'}
+              </Button>
+            </motion.div>
+
+            {isEraser && (
+              <div className="flex items-center gap-2">
+                <input
+                  type="range"
+                  min="5"
+                  max="50"
+                  value={eraserRadius}
+                  onChange={(e) => setEraserRadius(Number(e.target.value))}
+                  className="w-24 accent-blue-600"
+                />
+                <span className="text-white text-sm">{eraserRadius}px</span>
+              </div>
+            )}
+          </div>
           
           <div className="flex gap-3 justify-center flex-wrap">
-            {SWATCHES.map((swatch: string) => (
+            {!isEraser && SWATCHES.map((swatch: string) => (
               <motion.button
                 key={swatch}
                 className="w-8 h-8 rounded-full border-2 border-neutral-600 shadow-md transition-all duration-300"
