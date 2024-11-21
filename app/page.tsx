@@ -3,7 +3,7 @@
 import { Button } from "@/components/ui/button";
 import { useEffect, useRef, useState, useCallback, createRef } from "react";
 import axios from "axios";
-import Draggable, {DraggableEvent} from "react-draggable";
+import Draggable, { DraggableEvent } from "react-draggable";
 import { SWATCHES } from "@/app/constants";
 import { motion } from "framer-motion";
 import type { GeneratedResult, LatexExpression, Response } from "@/types";
@@ -72,14 +72,20 @@ export default function Home() {
     };
   }, []);
 
-  const renderLatexToCanvas = useCallback((expression: string, answer: string) => {
-    const latex = `\\(\\LARGE{${expression} = ${answer}}\\)`;
-    setLatexItems(prev => [...prev, {
-      content: latex,
-      position: { x: 10, y: 200 },
-      ref: createRef<HTMLDivElement>()
-    }]);
-  }, []);
+  const renderLatexToCanvas = useCallback(
+    (expression: string, answer: string) => {
+      const latex = `\\(\\LARGE{${expression} = ${answer}}\\)`;
+      setLatexItems((prev) => [
+        ...prev,
+        {
+          content: latex,
+          position: { x: 10, y: 200 },
+          ref: createRef<HTMLDivElement>(),
+        },
+      ]);
+    },
+    []
+  );
 
   useEffect(() => {
     if (result) {
@@ -105,9 +111,9 @@ export default function Home() {
         ctx.beginPath();
         ctx.moveTo(e.nativeEvent.offsetX, e.nativeEvent.offsetY);
         if (isEraser) {
-          ctx.globalCompositeOperation = 'destination-out';
+          ctx.globalCompositeOperation = "destination-out";
         } else {
-          ctx.globalCompositeOperation = 'source-over';
+          ctx.globalCompositeOperation = "source-over";
         }
         setIsDrawing(true);
       }
@@ -116,7 +122,7 @@ export default function Home() {
 
   const draw = (e: React.MouseEvent<HTMLCanvasElement>) => {
     if (!isDrawing) return;
-    
+
     const canvas = canvasRef.current;
     if (canvas) {
       const ctx = canvas.getContext("2d");
@@ -124,7 +130,7 @@ export default function Home() {
         if (isEraser) {
           erase(e);
         } else {
-          ctx.globalCompositeOperation = 'source-over';
+          ctx.globalCompositeOperation = "source-over";
           ctx.strokeStyle = color;
           ctx.lineTo(e.nativeEvent.offsetX, e.nativeEvent.offsetY);
           ctx.stroke();
@@ -153,12 +159,12 @@ export default function Home() {
 
         const resp = response.data;
         console.log("Response", resp);
-        
+
         if (!resp.data || resp.data.length === 0) {
           console.log("No results found");
           setResult({
             expression: "Error",
-            answer: "No results found"
+            answer: "No results found",
           });
           return;
         }
@@ -166,7 +172,7 @@ export default function Home() {
         // Process assignments first
         resp.data.forEach((data: Response) => {
           if (data.assign === true) {
-            setDictOfVars(prev => ({
+            setDictOfVars((prev) => ({
               ...prev,
               [data.expr]: data.result,
             }));
@@ -191,9 +197,9 @@ export default function Home() {
         const ctx = canvas.getContext("2d");
         const imageData = ctx!.getImageData(0, 0, canvas.width, canvas.height);
         let minX = canvas.width,
-            minY = canvas.height,
-            maxX = 0,
-            maxY = 0;
+          minY = canvas.height,
+          maxX = 0,
+          maxY = 0;
 
         for (let y = 0; y < canvas.height; y++) {
           for (let x = 0; x < canvas.width; x++) {
@@ -208,21 +214,20 @@ export default function Home() {
         }
 
         // Update positions of all latex items to stack them vertically below the equation
-        setLatexItems(prev => 
+        setLatexItems((prev) =>
           prev.map((item, i) => ({
             ...item,
-            position: { 
+            position: {
               x: (minX + maxX) / 2 - 50, // Center horizontally, offset by 50px for better visual alignment
-              y: maxY + 50 + (i * 40)    // Position below the equation with 50px gap, stack with 40px spacing
-            }
+              y: maxY + 50 + i * 40, // Position below the equation with 50px gap, stack with 40px spacing
+            },
           }))
         );
-
       } catch (error) {
         console.error("Error calling API:", error);
         setResult({
           expression: "Error",
-          answer: "Failed to process expression"
+          answer: "Failed to process expression",
         });
       }
     }
@@ -230,14 +235,20 @@ export default function Home() {
 
   const erase = (e: React.MouseEvent<HTMLCanvasElement>) => {
     if (!isDrawing) return;
-    
+
     const canvas = canvasRef.current;
     if (canvas) {
       const ctx = canvas.getContext("2d");
       if (ctx) {
-        ctx.globalCompositeOperation = 'destination-out';
+        ctx.globalCompositeOperation = "destination-out";
         ctx.beginPath();
-        ctx.arc(e.nativeEvent.offsetX, e.nativeEvent.offsetY, eraserRadius, 0, Math.PI * 2);
+        ctx.arc(
+          e.nativeEvent.offsetX,
+          e.nativeEvent.offsetY,
+          eraserRadius,
+          0,
+          Math.PI * 2
+        );
         ctx.fill();
       }
     }
@@ -246,13 +257,17 @@ export default function Home() {
   const updateCursorPosition = (e: React.MouseEvent<HTMLCanvasElement>) => {
     setCursorPosition({
       x: e.nativeEvent.offsetX,
-      y: e.nativeEvent.offsetY
+      y: e.nativeEvent.offsetY,
     });
   };
 
-  const handleDrag = (index: number, e: DraggableEvent, data: { x: number; y: number }) => {
-    setLatexItems(prev => 
-      prev.map((item, i) => 
+  const handleDrag = (
+    index: number,
+    e: DraggableEvent,
+    data: { x: number; y: number }
+  ) => {
+    setLatexItems((prev) =>
+      prev.map((item, i) =>
         i === index ? { ...item, position: { x: data.x, y: data.y } } : item
       )
     );
@@ -260,10 +275,32 @@ export default function Home() {
 
   return (
     <main className="fixed inset-0 w-screen h-screen bg-black overflow-hidden">
+      <div className="z-50 absolute top-0 left-0 right-0 p-4 bg-neutral-900 bg-opacity-80 backdrop-blur-sm border-b border-neutral-700">
+        <div className="mx-auto max-w-7xl w-full flex flex-row items-center justify-between">
+          <motion.h1 
+            className="text-white text-xl font-bold"
+            whileHover={{ scale: 1.10 }}
+            whileTap={{ scale: 0.95 }}
+          >
+            SmartCalc
+          </motion.h1>
+          <motion.a
+            href="https://arjuncodess.vercel.app"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-neutral-400 hover:text-white underline underline-offset-4 transition-colors duration-200"
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+          >
+            @arjuncodess
+          </motion.a>
+        </div>
+      </div>
+
       <canvas
         ref={canvasRef}
-        id='canvas'
-        className='absolute inset-0 w-full h-full'
+        id="canvas"
+        className="absolute inset-0 w-full h-full"
         onMouseDown={startDrawing}
         onMouseMove={(e) => {
           updateCursorPosition(e);
@@ -279,8 +316,10 @@ export default function Home() {
           style={{
             width: `${eraserRadius * 2}px`,
             height: `${eraserRadius * 2}px`,
-            transform: `translate(${cursorPosition.x - eraserRadius}px, ${cursorPosition.y - eraserRadius}px)`,
-            transition: 'width 0.2s, height 0.2s'
+            transform: `translate(${cursorPosition.x - eraserRadius}px, ${
+              cursorPosition.y - eraserRadius
+            }px)`,
+            transition: "width 0.2s, height 0.2s",
           }}
         />
       )}
@@ -293,10 +332,10 @@ export default function Home() {
           bounds="parent"
           nodeRef={item.ref}
         >
-          <div 
+          <div
             ref={item.ref}
             className="absolute p-2 text-white rounded shadow-md cursor-move"
-            style={{ touchAction: 'none' }}
+            style={{ touchAction: "none" }}
           >
             <div className="latex-content">{item.content}</div>
           </div>
@@ -319,12 +358,12 @@ export default function Home() {
               <Button
                 onClick={() => setIsEraser(!isEraser)}
                 className={`${
-                  isEraser 
-                    ? 'bg-blue-600 hover:bg-blue-700' 
-                    : 'bg-neutral-700 hover:bg-neutral-600'
+                  isEraser
+                    ? "bg-blue-600 hover:bg-blue-700"
+                    : "bg-neutral-700 hover:bg-neutral-600"
                 } text-neutral-100 font-semibold py-2 px-4 rounded-full shadow-lg transition-all duration-300`}
               >
-                {isEraser ? 'Drawing Mode' : 'Eraser Mode'}
+                {isEraser ? "Drawing Mode" : "Eraser Mode"}
               </Button>
             </motion.div>
 
@@ -342,21 +381,26 @@ export default function Home() {
               </div>
             )}
           </div>
-          
+
           <div className="flex gap-3 justify-center flex-wrap my-2 sm:my-0">
-            {!isEraser && SWATCHES.map((swatch: string) => (
-              <motion.button
-                key={swatch}
-                className="w-8 h-8 rounded-full border-2 border-neutral-600 shadow-md transition-all duration-300"
-                style={{ backgroundColor: swatch }}
-                onClick={() => setColor(swatch)}
-                whileHover={{ scale: 1.2 }}
-                whileTap={{ scale: 0.9 }}
-              />
-            ))}
+            {!isEraser &&
+              SWATCHES.map((swatch: string) => (
+                <motion.button
+                  key={swatch}
+                  className="w-8 h-8 rounded-full border-2 border-neutral-600 shadow-md transition-all duration-300"
+                  style={{ backgroundColor: swatch }}
+                  onClick={() => setColor(swatch)}
+                  whileHover={{ scale: 1.2 }}
+                  whileTap={{ scale: 0.9 }}
+                />
+              ))}
           </div>
-          
-          <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} className="w-full sm:w-auto flex justify-center">
+
+          <motion.div
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            className="w-full sm:w-auto flex justify-center"
+          >
             <Button
               onClick={runRoute}
               className="bg-green-600 hover:bg-green-700 text-neutral-100 font-semibold py-2 px-4 rounded-full shadow-lg transition-all duration-300"
